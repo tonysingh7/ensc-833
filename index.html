@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      QoS Enforcement for Bidirectional UDP-Based Control and Telemetry Traffic
+    </title>
+
+    <style>
+      body {
+        max-width: 850px;
+        margin: auto;
+        padding: 40px;
+        font-family: Georgia, serif;
+        line-height: 1.7;
+        background: #fafafa;
+      }
+
+      h1,
+      h2 {
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 4px;
+      }
+
+      nav {
+        background: #eee;
+        padding: 10px;
+        margin-bottom: 30px;
+      }
+
+      figure {
+        text-align: center;
+        margin: 20px;
+      }
+
+      figcaption {
+        font-size: 0.9em;
+        color: #555;
+      }
+
+      a {
+        text-decoration: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>
+      Proposal: QoS Enforcement for Bidirectional UDP-Based Control and
+      Telemetry Traffic Using Packet Scheduling
+    </h1>
+
+    <p><b>Author:</b> Harsimranjeet Singh</p>
+    <p><b>Course:</b> ENSC 833</p>
+    <p><b>Group:</b> 7</p>
+    <p><b>Date:</b> February 20, 2026</p>
+
+    <nav>
+      <b>Contents</b>
+      <ul>
+        <li><a href="#abstract">Abstract</a></li>
+        <li><a href="#project">Project Description</a></li>
+        <li><a href="#references">References</a></li>
+      </ul>
+    </nav>
+
+    <h2 id="abstract">Abstract</h2>
+    <p>
+      Many networked control systems rely on the User Datagram Protocol (UDP) to
+      achieve low-latency communication between a centralized controller and
+      multiple devices. These systems typically exchange bidirectional traffic,
+      consisting of controller-to-device control messages and
+      device-to-controller telemetry data, each with different Quality of
+      Service (QoS) requirements. Because UDP provides no built-in congestion
+      control or reliability, such systems are vulnerable to increased delay and
+      packet loss when deployed on shared networks.
+    </p>
+
+    <h2 id="project">Project Description</h2>
+    <p>
+      This project proposes to evaluate the effectiveness of packet scheduling
+      algorithms in enforcing QoS for bidirectional UDP-based control and
+      telemetry traffic. Using the ns-3 network simulator, a simple
+      client–server topology will be modeled in which a centralized orchestrator
+      communicates with multiple devices over a shared bottleneck link in the
+      presence of background traffic. Packet scheduling disciplines such as
+      First-In First-Out (FIFO), Priority Queuing, and Weighted Fair Queuing
+      will be compared.
+    </p>
+
+    <p>
+      Performance metrics including end-to-end delay, jitter, packet loss, and
+      throughput will be used to assess how well each scheduling approach
+      supports the QoS requirements of control and telemetry traffic.
+    </p>
+
+    <h2 id="references">References</h2>
+    <ol>
+      <li>J. Postel, “User Datagram Protocol,” RFC 768, Aug. 1980.</li>
+      <li>
+        A. Demers, S. Keshav, and S. Shenker, “Analysis and simulation of a fair
+        queueing algorithm,” ACM SIGCOMM Computer Communication Review, vol. 19,
+        no. 4, pp. 1–12, Sept. 1989.
+      </li>
+      <li>
+        S. Floyd and V. Jacobson, “Link-sharing and resource management models
+        for packet networks,” IEEE/ACM Transactions on Networking, vol. 3, no.
+        4, pp. 365–386, Aug. 1995.
+      </li>
+      <li>
+        R. Braden, D. Clark, and S. Shenker, “Integrated services in the
+        Internet architecture: an overview,” RFC 1633, June 1994.
+      </li>
+      <li>
+        <a href="https://www.nsnam.org">
+          ns-3 Consortium, “ns-3 Network Simulator”
+        </a>
+      </li>
+    </ol>
+  </body>
+</html>
