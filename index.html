@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>
       QoS Enforcement for Bidirectional UDP-Based Control and Telemetry Traffic
+      Using Packet Scheduling
     </title>
 
     <style>
@@ -18,7 +19,8 @@
       }
 
       h1,
-      h2 {
+      h2,
+      h3 {
         border-bottom: 1px solid #ccc;
         padding-bottom: 4px;
       }
@@ -39,84 +41,530 @@
         color: #555;
       }
 
+      img {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid #ddd;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: white;
+      }
+
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+
       a {
         text-decoration: none;
+      }
+
+      code,
+      pre {
+        font-family: monospace;
+        font-size: 0.9em;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        background: #f4f4f4;
+        padding: 15px;
+        border: 1px solid #ddd;
+        overflow-x: auto;
       }
     </style>
   </head>
 
   <body>
     <h1>
-      Proposal: QoS Enforcement for Bidirectional UDP-Based Control and
-      Telemetry Traffic Using Packet Scheduling
+      ENSC 833 Final Project Report: QoS Enforcement for Bidirectional UDP-Based
+      Control and Telemetry Traffic Using Packet Scheduling
     </h1>
 
     <p><b>Author:</b> Harsimranjeet Singh</p>
-    <p><b>Course:</b> ENSC 833</p>
-    <p><b>Group:</b> 6</p>
-    <p><b>Date:</b> February 20, 2026</p>
+    <p><b>Course:</b> ENSC 833 Network Protocols and Performance</p>
+    <p><b>Instructor:</b> Dr. Ljiljana Trajkovic</p>
+    <p><b>Team:</b> Team 6</p>
+    <p><b>Term:</b> Spring 2026</p>
+    <p>
+      <b>Project web page:</b>
+      <a href="https://tonysingh7.github.io/ensc-833/">
+        https://tonysingh7.github.io/ensc-833/
+      </a>
+    </p>
+    <p>
+      <b>Final report PDF:</b>
+      <a href="ENSC833_Final_Project_Report_H-Singh-Final-Submission.pdf">
+        Download PDF
+      </a>
+    </p>
 
     <nav>
       <b>Contents</b>
       <ul>
-        <li><a href="#abstract">Abstract</a></li>
-        <li><a href="#project">Project Description</a></li>
-        <li><a href="#references">References</a></li>
+        <li><a href="#abstract">1. Abstract</a></li>
+        <li><a href="#introduction">2. Introduction</a></li>
+        <li><a href="#methodology">3. System Design and Methodology</a></li>
+        <li><a href="#results">4. Results</a></li>
+        <li><a href="#discussion">5. Discussion and Conclusions</a></li>
+        <li><a href="#references">6. References</a></li>
+        <li><a href="#appendix">Appendix A. Code Listing</a></li>
       </ul>
     </nav>
 
-    <h2 id="abstract">Abstract</h2>
+    <h2 id="abstract">1. ABSTRACT</h2>
     <p>
-      Many networked control systems rely on the User Datagram Protocol (UDP) to
-      achieve low-latency communication between a centralized controller and
-      multiple devices. These systems typically exchange bidirectional traffic,
-      consisting of controller-to-device control messages and
-      device-to-controller telemetry data, each with different Quality of
-      Service (QoS) requirements. Because UDP provides no built-in congestion
-      control or reliability, such systems are vulnerable to increased delay and
-      packet loss when deployed on shared networks.
-    </p>
-
-    <h2 id="project">Project Description</h2>
-    <p>
-      This project proposes to evaluate the effectiveness of packet scheduling
-      algorithms in enforcing QoS for bidirectional UDP-based control and
-      telemetry traffic. Using the ns-3 network simulator, a simple
-      client–server topology will be modeled in which a centralized orchestrator
-      communicates with multiple devices over a shared bottleneck link in the
-      presence of background traffic. Packet scheduling disciplines such as
-      First-In First-Out (FIFO), Priority Queuing, and Weighted Fair Queuing
-      will be compared.
+      This project evaluates how packet scheduling can enforce Quality of
+      Service (QoS) for bidirectional UDP traffic in a centralized control
+      system. Using ns-3, a single orchestrator exchanges control traffic with
+      multiple followers across a shared bottleneck while reverse-direction
+      status, telemetry, bulk, and competing background traffic contend for the
+      same constrained resource. Five queueing disciplines were compared: FIFO,
+      PFIFO_FAST-style priority FIFO, strict-priority PRIO, FQ-PIE, and
+      FQ-CoDel. The study further examined the effect of enabling DSCP marking
+      and classifier-aware priority mapping.
     </p>
 
     <p>
-      Performance metrics including end-to-end delay, jitter, packet loss, and
-      throughput will be used to assess how well each scheduling approach
-      supports the QoS requirements of control and telemetry traffic.
+      Under overload, FIFO produced severe control degradation, reaching
+      40.8 ms mean control delay and 61.4% control loss at the baseline
+      comparison point, while FQ-PIE and FQ-CoDel held control delay to
+      8.9 ms with zero control loss. DSCP produced the largest benefit when
+      used with priority schedulers: PFIFO_FAST-style and PRIO improved from
+      40.8 ms and 61.4% control loss to 8.9 ms and 0.0% loss, respectively.
+      Load-sweep and follower-sweep experiments showed that fair-queue
+      schedulers remained stable as offered background load and follower count
+      increased, whereas FIFO and non-DSCP priority configurations degraded
+      rapidly. The results show that queue selection is not a cosmetic
+      implementation detail in UDP-based control systems; it directly determines
+      whether latency-sensitive control traffic survives overload conditions.
     </p>
 
-    <h2 id="references">References</h2>
+    <h2 id="introduction">2. INTRODUCTION</h2>
+    <p>
+      Many practical networked control systems favor UDP because it avoids
+      connection setup, retransmission delay, and protocol-level congestion
+      behavior that may interfere with tight update cycles. In a centralized
+      orchestrator-and-device architecture, however, the same network path often
+      carries multiple traffic classes with very different requirements. Small
+      control packets require low delay and low loss, while reverse-direction
+      telemetry and status updates are valuable but can tolerate somewhat lower
+      priority. Bulk transfers and unrelated background traffic can safely
+      absorb the remaining capacity.
+    </p>
+
+    <p>
+      This problem is especially relevant in embedded and industrial control
+      settings, where a supervisory node may exchange frequent small control
+      messages with multiple field devices while also collecting status and
+      telemetry over the same shared path. In such systems, the concern is not
+      simply raw throughput; it is whether the network can preserve bounded
+      delay and acceptable loss for the classes that actually influence control
+      behavior. That makes the queue at the bottleneck a first-order design
+      concern rather than a background implementation detail.
+    </p>
+
+    <p>
+      This combination creates a scheduling problem rather than a simple
+      transport-choice problem. UDP itself does not classify traffic, reserve
+      bandwidth, or prevent queue buildup. If all packets are treated
+      identically at a shared bottleneck, short control messages can become
+      trapped behind larger or more numerous packets, which increases queueing
+      delay and can eventually drive packet loss. The central question of this
+      project is therefore whether packet scheduling can enforce practical QoS
+      separation for bidirectional UDP control and telemetry traffic without
+      changing the application transport.
+    </p>
+
+    <h2 id="methodology">3. SYSTEM DESIGN AND METHODOLOGY</h2>
+
+    <h3>3.1 Network topology and traffic model</h3>
+    <p>
+      The simulated system contains one orchestrator, two routers connected by a
+      bidirectional bottleneck, a set of follower nodes, and two bidirectional
+      background-traffic endpoints. The orchestrator connects to Router A
+      through an access link, the followers connect to Router B through
+      individual access links, and the queueing discipline under test is
+      installed on both directions of the Router A–Router B bottleneck. Access
+      links run at 100 Mbps with 1 ms propagation delay, while the bottleneck is
+      configured at 10 Mbps with 5 ms propagation delay. In the baseline
+      experiments, the queue size is fixed at 40 packets and the simulation time
+      is 20 s.
+    </p>
+
+    <figure>
+      <img src="topology_diagram.png" alt="Simulation topology" />
+      <figcaption>
+        Figure 1. Simulation topology for bidirectional UDP control, telemetry,
+        and background traffic.
+      </figcaption>
+    </figure>
+
+    <p>
+      Four application classes are generated within the control system itself.
+      Control traffic is sent from the orchestrator to every follower. Status,
+      telemetry, and bulk traffic are sent from each follower back to the
+      orchestrator. Additional bidirectional background traffic is injected
+      across the bottleneck in order to create overload conditions.
+    </p>
+
+    <h3>3.2 Traffic classes and DSCP mapping</h3>
+    <p>
+      Each application class is defined by a packet size, sending rate, port
+      range, and DSCP value. Control traffic is marked AF42 when DSCP is
+      enabled, status is marked AF43, telemetry is marked AF41, and bulk uses
+      CS1. Background traffic is left at default treatment.
+    </p>
+
+    <table>
+      <tr>
+        <th>Class</th>
+        <th>Direction</th>
+        <th>Packet size</th>
+        <th>Rate</th>
+        <th>DSCP</th>
+        <th>Priority intent</th>
+      </tr>
+      <tr>
+        <td>Control</td>
+        <td>Orchestrator -&gt; followers</td>
+        <td>64 B</td>
+        <td>200 pps</td>
+        <td>AF42 (36)</td>
+        <td>Highest</td>
+      </tr>
+      <tr>
+        <td>Status</td>
+        <td>Followers -&gt; orchestrator</td>
+        <td>96 B</td>
+        <td>100 pps</td>
+        <td>AF43 (38)</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td>Telemetry</td>
+        <td>Followers -&gt; orchestrator</td>
+        <td>512 B</td>
+        <td>50 pps</td>
+        <td>AF41 (34)</td>
+        <td>Lower</td>
+      </tr>
+      <tr>
+        <td>Bulk</td>
+        <td>Followers -&gt; orchestrator</td>
+        <td>1400 B</td>
+        <td>20 pps</td>
+        <td>CS1 (8)</td>
+        <td>Lowest / filler</td>
+      </tr>
+      <tr>
+        <td>Background</td>
+        <td>Both directions</td>
+        <td>1400 B</td>
+        <td>Variable</td>
+        <td>Default</td>
+        <td>Competing load</td>
+      </tr>
+    </table>
+
+    <figure>
+      <img src="dscp_band_mapping.png" alt="DSCP band mapping" />
+      <figcaption>
+        Figure 2. DSCP-to-priority band mapping for PFIFO_FAST-style and PRIO
+        schedulers.
+      </figcaption>
+    </figure>
+
+    <h3>3.3 Queueing disciplines under test</h3>
+    <p>
+      Five queueing disciplines were compared. FIFO serves as the no-priority
+      baseline. The PFIFO_FAST-style baseline was implemented as a three-band
+      PRIO queue with FIFO children and a classifier that emulates a
+      PFIFO_FAST-like DSCP mapping. The PRIO case extends this idea into a
+      four-band strict-priority hierarchy so that control, status, telemetry,
+      and lower-priority/default traffic can be separated more explicitly.
+      FQ-PIE and FQ-CoDel represent fair-queue / active-queue-management
+      approaches that attempt to isolate flows and suppress persistent queue
+      growth.
+    </p>
+
+    <h3>3.4 Experimental scenarios</h3>
+    <p>
+      Three scenario families were executed. The scheduler-comparison scenario
+      fixed the bottleneck at 10 Mbps, the number of followers at 4, the queue
+      size at 40 packets, and the background rate at 12 Mbps per direction, and
+      then compared all five schedulers with DSCP both disabled and enabled. The
+      load-sweep scenario fixed the follower count at 4 and varied the
+      background rate per direction across 8, 10, 12, 14, and 16 Mbps. The
+      follower-sweep scenario fixed the offered background load at 12 Mbps per
+      direction and varied the number of followers across 4, 8, and 16.
+    </p>
+
+    <table>
+      <tr>
+        <th>Scenario family</th>
+        <th>Swept parameter</th>
+        <th>Fixed settings</th>
+        <th>DSCP modes</th>
+        <th>Runs</th>
+      </tr>
+      <tr>
+        <td>Scheduler comparison</td>
+        <td>Scheduler</td>
+        <td>Followers=4, bg=12 Mbps/dir, queue=40 pkts, bottleneck=10 Mbps, sim=20 s</td>
+        <td>Off and on</td>
+        <td>10</td>
+      </tr>
+      <tr>
+        <td>Load sweep</td>
+        <td>Background load</td>
+        <td>Followers=4, queue=40 pkts, bottleneck=10 Mbps, bg=8..16 Mbps/dir</td>
+        <td>Off and on</td>
+        <td>50</td>
+      </tr>
+      <tr>
+        <td>Follower sweep</td>
+        <td>Follower count</td>
+        <td>bg=12 Mbps/dir, queue=40 pkts, bottleneck=10 Mbps, followers=4/8/16</td>
+        <td>Off and on</td>
+        <td>30</td>
+      </tr>
+    </table>
+
+    <h3>3.5 Metrics and data processing</h3>
+    <p>
+      The simulator exports per-flow statistics to CSV, including transmitted
+      and received packets, packet loss, throughput, mean delay, and mean
+      jitter. These raw outputs are then aggregated into class-summary CSV files
+      by grouping over scenario, scheduler, DSCP mode, follower count,
+      background rate, and flow class. In addition to delay, loss, jitter, and
+      throughput, the post-processing stage computes Jain fairness indices.
+    </p>
+
+    <h2 id="results">4. RESULTS</h2>
+
+    <h3>4.1 Baseline overloaded scheduler comparison</h3>
+    <p>
+      The baseline scheduler-comparison point uses 4 followers and 12 Mbps of
+      background traffic per direction over a 10 Mbps bottleneck. This is the
+      clearest view of scheduler behavior under overload. FIFO produces
+      40.8 ms mean control delay, 61.4% control packet loss, 1.0 ms mean
+      jitter, and only 0.227 Mbps control throughput. FQ-PIE and FQ-CoDel
+      reduce control delay to 8.9 ms, eliminate control loss, hold jitter at
+      0.2 ms, and preserve 0.589 Mbps control throughput even without DSCP.
+    </p>
+
+    <figure>
+      <img src="scheduler_control_delay.png" alt="Control delay comparison" />
+      <figcaption>
+        Figure 3. Mean end-to-end control delay under the baseline overloaded
+        comparison point.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="scheduler_control_loss.png" alt="Control loss comparison" />
+      <figcaption>
+        Figure 4. Control packet loss under the baseline overloaded comparison
+        point.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="scheduler_control_throughput.png" alt="Control throughput comparison" />
+      <figcaption>
+        Figure 5. Control throughput under the baseline overloaded comparison
+        point.
+      </figcaption>
+    </figure>
+
+    <h3>4.2 Per-class behavior and trade-offs</h3>
+    <p>
+      Control traffic is not the only class of interest. The per-class plots
+      reveal how each scheduler redistributes service across the system. With
+      DSCP enabled, the fair-queue schedulers keep control, status, telemetry,
+      and bulk delays low while still allowing background throughput to remain
+      high.
+    </p>
+
+    <figure>
+      <img src="per_class_delay_dscp_on.png" alt="Per-class delay" />
+      <figcaption>
+        Figure 8. Per-class delay by scheduler with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="per_class_loss_dscp_on.png" alt="Per-class packet loss" />
+      <figcaption>
+        Figure 9. Per-class packet loss by scheduler with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="heatmap_delay_dscp_on.png" alt="Delay heatmap" />
+      <figcaption>
+        Figure 10. Heatmap summary of per-class mean end-to-end delay with DSCP
+        enabled.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="heatmap_loss_dscp_on.png" alt="Loss heatmap" />
+      <figcaption>
+        Figure 11. Heatmap summary of per-class packet loss with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <h3>4.3 Load sweep</h3>
+    <p>
+      The load sweep tests whether the scheduler ranking observed at the
+      baseline point remains stable as background traffic is increased. The
+      answer is yes. Once the offered background load reaches 10 Mbps and then
+      exceeds the 10 Mbps bottleneck, FIFO begins to degrade rapidly, while
+      FQ-PIE and FQ-CoDel remain essentially flat across the full sweep.
+    </p>
+
+    <figure>
+      <img src="load_sweep_delay.png" alt="Load sweep delay" />
+      <figcaption>
+        Figure 14. Mean control delay across the offered-load sweep.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="load_sweep_loss.png" alt="Load sweep loss" />
+      <figcaption>
+        Figure 15. Control loss across the offered-load sweep.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="load_sweep_throughput.png" alt="Load sweep throughput" />
+      <figcaption>
+        Figure 16. Control throughput across the offered-load sweep.
+      </figcaption>
+    </figure>
+
+    <h3>4.4 Follower sweep</h3>
+    <p>
+      The follower sweep studies scaling pressure from the application side
+      rather than the background-load side. As the number of followers
+      increases from 4 to 8 and then 16, the same broad ranking remains visible.
+    </p>
+
+    <figure>
+      <img src="follower_sweep_delay.png" alt="Follower sweep delay" />
+      <figcaption>
+        Figure 17. Mean control delay across the follower-count sweep.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="follower_sweep_loss.png" alt="Follower sweep loss" />
+      <figcaption>
+        Figure 18. Control loss across the follower-count sweep.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="follower_sweep_throughput.png" alt="Follower sweep throughput" />
+      <figcaption>
+        Figure 19. Control throughput across the follower-count sweep.
+      </figcaption>
+    </figure>
+
+    <h3>4.5 Fairness analysis</h3>
+    <p>
+      Fairness was evaluated using Jain indices computed per application class.
+      The fairness plots complement the scheduler comparison by showing that
+      strong control protection can coexist with very different
+      service-distribution patterns.
+    </p>
+
+    <figure>
+      <img src="fairness_scheduler_dscp_on.png" alt="Scheduler fairness" />
+      <figcaption>
+        Figure 20. Jain throughput fairness index for the scheduler-comparison
+        scenario with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="fairness_load_dscp_on.png" alt="Load fairness" />
+      <figcaption>
+        Figure 21. Jain throughput fairness index across the offered-load sweep
+        with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="fairness_follower_dscp_on.png" alt="Follower fairness" />
+      <figcaption>
+        Figure 22. Jain throughput fairness index across the follower-count
+        sweep with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <h2 id="discussion">5. DISCUSSION AND CONCLUSIONS</h2>
+    <p>
+      This project demonstrates that QoS enforcement for bidirectional UDP
+      control traffic is fundamentally a queue-management problem. When all
+      packets share the bottleneck in a best-effort manner, control performance
+      can become unacceptable even in a simple topology.
+    </p>
+
+    <p>
+      The strongest practical conclusion is that two different solution families
+      work well in this setting. FQ-PIE and FQ-CoDel provide robust control
+      protection even without DSCP-specific tuning in the presented topology.
+      PFIFO_FAST-style and PRIO can also achieve very strong control behavior,
+      but only when DSCP marking is enabled and the classifier has enough bands
+      to separate the classes that matter.
+    </p>
+
+    <p>
+      In summary, the report finds that packet scheduling can successfully
+      enforce QoS for bidirectional UDP-based control and telemetry traffic, but
+      the outcome depends strongly on whether the scheduler can actually
+      distinguish classes and prevent latency-sensitive traffic from being
+      trapped in a common backlog. For the topology and workloads studied here,
+      FQ-PIE, FQ-CoDel, and DSCP-enabled PRIO were the most effective
+      configurations.
+    </p>
+
+    <h2 id="references">6. REFERENCES</h2>
     <ol>
+      <li>J. F. Kurose and K. W. Ross, <i>Computer Networking: A Top-Down Approach</i>, 8th ed. Pearson, 2021.</li>
       <li>J. Postel, “User Datagram Protocol,” RFC 768, Aug. 1980.</li>
-      <li>
-        A. Demers, S. Keshav, and S. Shenker, “Analysis and simulation of a fair
-        queueing algorithm,” ACM SIGCOMM Computer Communication Review, vol. 19,
-        no. 4, pp. 1–12, Sept. 1989.
-      </li>
-      <li>
-        S. Floyd and V. Jacobson, “Link-sharing and resource management models
-        for packet networks,” IEEE/ACM Transactions on Networking, vol. 3, no.
-        4, pp. 365–386, Aug. 1995.
-      </li>
-      <li>
-        R. Braden, D. Clark, and S. Shenker, “Integrated services in the
-        Internet architecture: an overview,” RFC 1633, June 1994.
-      </li>
-      <li>
-        <a href="https://www.nsnam.org">
-          ns-3 Consortium, “ns-3 Network Simulator”
-        </a>
-      </li>
+      <li>K. Nichols, S. Blake, F. Baker, and D. Black, “Definition of the Differentiated Services Field (DS Field) in the IPv4 and IPv6 Headers,” RFC 2474, Dec. 1998.</li>
+      <li>R. Braden, D. Clark, and S. Shenker, “Integrated services in the Internet architecture: an overview,” RFC 1633, June 1994.</li>
+      <li>A. Demers, S. Keshav, and S. Shenker, “Analysis and simulation of a fair queueing algorithm,” ACM SIGCOMM Computer Communication Review, vol. 19, no. 4, pp. 1-12, Sept. 1989.</li>
+      <li>S. Floyd and V. Jacobson, “Link-sharing and resource management models for packet networks,” IEEE/ACM Transactions on Networking, vol. 3, no. 4, pp. 365-386, Aug. 1995.</li>
+      <li>A. K. Parekh and R. G. Gallager, “A generalized processor sharing approach to flow control in integrated services networks: the single-node case,” IEEE/ACM Transactions on Networking, vol. 1, no. 3, pp. 344-357, June 1993.</li>
+      <li>M. Shreedhar and G. Varghese, “Efficient fair queueing using deficit round robin,” IEEE/ACM Transactions on Networking, vol. 4, no. 3, pp. 375-385, June 1996.</li>
+      <li>K. Nichols and V. Jacobson, “Controlling queue delay,” ACM Queue, vol. 10, no. 5, May 2012.</li>
+      <li>A. Aijaz et al., “QoS Provisioning for Industrial IoT: Evaluation of Packet Scheduling in Mixed Real-Time and Best-Effort Traffic,” IEEE Access, vol. 7, pp. 89542-89556, 2019.</li>
+      <li>R. Jain, D.-M. Chiu, and W. R. Hawe, “A Quantitative Measure of Fairness and Discrimination for Resource Allocation in Shared Computer Systems,” DEC Research Report TR-301, 1984.</li>
+      <li>T. R. Henderson et al., “The ns-3 Network Simulator,” in <i>Modeling and Tools for Network Simulation</i>. Berlin, Heidelberg: Springer, 2008, pp. 15-34.</li>
     </ol>
+
+    <h2 id="appendix">APPENDIX A. CODE LISTING</h2>
+    <p>
+      Listing A.1. Commented ns-3 source used to generate the study results.
+    </p>
+
+    <p>
+      Rather than pasting the full source directly into the webpage, it is
+      cleaner to link it here:
+      <a href="qos_udp_study_commented.cpp">qos_udp_study_commented.cpp</a>
+    </p>
   </body>
 </html>
