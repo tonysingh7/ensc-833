@@ -33,7 +33,7 @@
 
       figure {
         text-align: center;
-        margin: 20px;
+        margin: 20px 0;
       }
 
       figcaption {
@@ -45,6 +45,7 @@
         max-width: 100%;
         height: auto;
         border: 1px solid #ddd;
+        background: white;
       }
 
       table {
@@ -64,20 +65,6 @@
 
       a {
         text-decoration: none;
-      }
-
-      code,
-      pre {
-        font-family: monospace;
-        font-size: 0.9em;
-      }
-
-      pre {
-        white-space: pre-wrap;
-        background: #f4f4f4;
-        padding: 15px;
-        border: 1px solid #ddd;
-        overflow-x: auto;
       }
     </style>
   </head>
@@ -102,7 +89,7 @@
     <p>
       <b>Final report PDF:</b>
       <a href="ENSC833_Final_Project_Report_H-Singh-Final-Submission.pdf">
-        Download PDF
+        ENSC833_Final_Project_Report_H-Singh-Final-Submission.pdf
       </a>
     </p>
 
@@ -129,22 +116,19 @@
       same constrained resource. Five queueing disciplines were compared: FIFO,
       PFIFO_FAST-style priority FIFO, strict-priority PRIO, FQ-PIE, and
       FQ-CoDel. The study further examined the effect of enabling DSCP marking
-      and classifier-aware priority mapping.
-    </p>
-
-    <p>
-      Under overload, FIFO produced severe control degradation, reaching
-      40.8 ms mean control delay and 61.4% control loss at the baseline
-      comparison point, while FQ-PIE and FQ-CoDel held control delay to
-      8.9 ms with zero control loss. DSCP produced the largest benefit when
-      used with priority schedulers: PFIFO_FAST-style and PRIO improved from
-      40.8 ms and 61.4% control loss to 8.9 ms and 0.0% loss, respectively.
-      Load-sweep and follower-sweep experiments showed that fair-queue
-      schedulers remained stable as offered background load and follower count
-      increased, whereas FIFO and non-DSCP priority configurations degraded
-      rapidly. The results show that queue selection is not a cosmetic
-      implementation detail in UDP-based control systems; it directly determines
-      whether latency-sensitive control traffic survives overload conditions.
+      and classifier-aware priority mapping. Under overload, FIFO produced
+      severe control degradation, reaching 40.8 ms mean control delay and 61.4%
+      control loss at the baseline comparison point, while FQ-PIE and FQ-CoDel
+      held control delay to 8.9 ms with zero control loss. DSCP produced the
+      largest benefit when used with priority schedulers: PFIFO_FAST-style and
+      PRIO improved from 40.8 ms and 61.4% control loss to 8.9 ms and 0.0%
+      loss, respectively. Load-sweep and follower-sweep experiments showed that
+      fair-queue schedulers remained stable as offered background load and
+      follower count increased, whereas FIFO and non-DSCP priority
+      configurations degraded rapidly. The results show that queue selection is
+      not a cosmetic implementation detail in UDP-based control systems; it
+      directly determines whether latency-sensitive control traffic survives
+      overload conditions.
     </p>
 
     <h2 id="introduction">2. INTRODUCTION</h2>
@@ -183,6 +167,34 @@
       changing the application transport.
     </p>
 
+    <p>
+      The project title remains the same as in the proposal: QoS Enforcement for
+      Bidirectional UDP-Based Control and Telemetry Traffic Using Packet
+      Scheduling. The final implementation preserves the original idea of a
+      simple, single-bottleneck ns-3 topology, but extends it into a more
+      complete experimental study that includes scheduler comparison,
+      offered-load sweeps, follower-count sweeps, DSCP-aware classification,
+      and fairness analysis.
+    </p>
+
+    <p>
+      Classic work in transport, differentiated services, and queueing directly
+      motivates this study. UDP provides minimal transport service and leaves
+      reliability and congestion behavior to the application or network edge.
+      The Differentiated Services field provides a standardized way to carry
+      class information in the IP header, while integrated-services work
+      established the broader principle that differentiated service quality
+      requires explicit treatment in the network rather than a purely
+      best-effort forwarding model. Fair queueing, link-sharing, generalized
+      processor sharing, and deficit-round-robin literature showed that the
+      queue discipline itself can strongly shape delay and service distribution
+      across competing flows. More recent active queue management work
+      emphasized queue-delay control, and recent industrial-IoT studies
+      continue to show that scheduling policy remains central when real-time and
+      best-effort traffic coexist. The present study uses Jain fairness metrics
+      to quantify service distribution and implements the experiments in ns-3.
+    </p>
+
     <h2 id="methodology">3. SYSTEM DESIGN AND METHODOLOGY</h2>
 
     <h3>3.1 Network topology and traffic model</h3>
@@ -196,7 +208,9 @@
       links run at 100 Mbps with 1 ms propagation delay, while the bottleneck is
       configured at 10 Mbps with 5 ms propagation delay. In the baseline
       experiments, the queue size is fixed at 40 packets and the simulation time
-      is 20 s.
+      is 20 s. The implementation also exposes all major settings as
+      command-line arguments so that the same program can be reused for matrix
+      runs and parameter sweeps.
     </p>
 
     <figure>
@@ -212,7 +226,10 @@
       Control traffic is sent from the orchestrator to every follower. Status,
       telemetry, and bulk traffic are sent from each follower back to the
       orchestrator. Additional bidirectional background traffic is injected
-      across the bottleneck in order to create overload conditions.
+      across the bottleneck in order to create overload conditions. This
+      produces a bidirectional study rather than a purely downlink or uplink
+      experiment, which is important because the forward and reverse directions
+      carry different semantics and compete differently under shared queueing.
     </p>
 
     <h3>3.2 Traffic classes and DSCP mapping</h3>
@@ -220,7 +237,22 @@
       Each application class is defined by a packet size, sending rate, port
       range, and DSCP value. Control traffic is marked AF42 when DSCP is
       enabled, status is marked AF43, telemetry is marked AF41, and bulk uses
-      CS1. Background traffic is left at default treatment.
+      CS1. Background traffic is left at default treatment. These markings are
+      important because the PFIFO_FAST-style and PRIO schedulers use explicit
+      packet filters that map DSCP values into queue bands. AF42 is treated as
+      the highest-priority control class; AF43 is placed below it; AF41 is
+      placed lower still in the strict-priority configuration; and bulk or
+      default traffic remains in the lowest-priority band.
+    </p>
+
+    <p>
+      At the IP layer, these values are carried in the Differentiated Services
+      field defined for IPv4 and IPv6 headers in RFC 2474. In the present
+      study, DSCP marking is used only to expose class identity to the packet
+      filters used by the priority queueing cases; the marking does not itself
+      reserve bandwidth, but it allows the queue discipline to separate
+      control-relevant traffic from lower-priority traffic in a
+      standards-consistent way.
     </p>
 
     <table>
@@ -295,6 +327,15 @@
       growth.
     </p>
 
+    <p>
+      These five cases were selected because together they represent three
+      distinct design philosophies: pure best effort (FIFO), explicit class
+      priority (PFIFO_FAST-style and PRIO), and fair queueing with AQM
+      (FQ-PIE and FQ-CoDel). This makes it possible to study not only which
+      scheduler performs best in this topology, but also why it performs that
+      way.
+    </p>
+
     <h3>3.4 Experimental scenarios</h3>
     <p>
       Three scenario families were executed. The scheduler-comparison scenario
@@ -305,6 +346,14 @@
       background rate per direction across 8, 10, 12, 14, and 16 Mbps. The
       follower-sweep scenario fixed the offered background load at 12 Mbps per
       direction and varied the number of followers across 4, 8, and 16.
+    </p>
+
+    <p>
+      All scenario families were automated through shell scripts that passed
+      arguments to the compiled ns-3 program. In total, the study produced
+      90 simulations: 10 scheduler-comparison runs, 50 load-sweep runs, and
+      30 follower-sweep runs. This structure is sufficient to expose both a
+      single overloaded baseline point and two independent sensitivity studies.
     </p>
 
     <table>
@@ -346,6 +395,18 @@
       by grouping over scenario, scheduler, DSCP mode, follower count,
       background rate, and flow class. In addition to delay, loss, jitter, and
       throughput, the post-processing stage computes Jain fairness indices.
+      Throughput fairness is computed directly from per-flow throughput values,
+      while delay fairness is computed by applying Jain’s index to inverse delay
+      so that lower delay corresponds to better service. The final plots used in
+      this report were generated automatically from these aggregated CSV files.
+    </p>
+
+    <p>
+      One limitation of the present dataset is that each configuration was
+      executed with a single seed. That does not invalidate the trends, because
+      many of the differences are extremely large, but it does mean that this
+      report should be interpreted as a controlled deterministic study rather
+      than as a statistically replicated Monte Carlo analysis.
     </p>
 
     <h2 id="results">4. RESULTS</h2>
@@ -354,15 +415,19 @@
     <p>
       The baseline scheduler-comparison point uses 4 followers and 12 Mbps of
       background traffic per direction over a 10 Mbps bottleneck. This is the
-      clearest view of scheduler behavior under overload. FIFO produces
+      clearest view of scheduler behavior under overload. The control-plane
+      results show an immediate separation between the schedulers. FIFO produces
       40.8 ms mean control delay, 61.4% control packet loss, 1.0 ms mean
       jitter, and only 0.227 Mbps control throughput. FQ-PIE and FQ-CoDel
       reduce control delay to 8.9 ms, eliminate control loss, hold jitter at
       0.2 ms, and preserve 0.589 Mbps control throughput even without DSCP.
+      PFIFO_FAST-style and PRIO behave like FIFO when DSCP is disabled, but
+      once DSCP is enabled they match the strong low-delay, zero-loss control
+      behavior of the fair-queue schedulers.
     </p>
 
     <figure>
-      <img src="scheduler_control_delay.png" alt="Control delay comparison" />
+      <img src="01_scheduler_compare_control_delay.png" alt="Control delay comparison" />
       <figcaption>
         Figure 3. Mean end-to-end control delay under the baseline overloaded
         comparison point.
@@ -370,7 +435,7 @@
     </figure>
 
     <figure>
-      <img src="scheduler_control_loss.png" alt="Control loss comparison" />
+      <img src="02_scheduler_compare_control_loss.png" alt="Control loss comparison" />
       <figcaption>
         Figure 4. Control packet loss under the baseline overloaded comparison
         point.
@@ -378,10 +443,56 @@
     </figure>
 
     <figure>
-      <img src="scheduler_control_throughput.png" alt="Control throughput comparison" />
+      <img src="04_scheduler_compare_control_throughput.png" alt="Control throughput comparison" />
       <figcaption>
         Figure 5. Control throughput under the baseline overloaded comparison
         point.
+      </figcaption>
+    </figure>
+
+    <table>
+      <tr>
+        <th>Scheduler</th>
+        <th>DSCP</th>
+        <th>Delay (ms)</th>
+        <th>Loss (%)</th>
+        <th>Jitter (ms)</th>
+        <th>Throughput (Mbps)</th>
+      </tr>
+      <tr><td>FIFO</td><td>Off</td><td>40.8</td><td>61.4</td><td>1.0</td><td>0.227</td></tr>
+      <tr><td>FIFO</td><td>On</td><td>40.8</td><td>61.4</td><td>1.0</td><td>0.227</td></tr>
+      <tr><td>PFIFO_FAST-style</td><td>Off</td><td>40.8</td><td>61.4</td><td>1.0</td><td>0.227</td></tr>
+      <tr><td>PFIFO_FAST-style</td><td>On</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+      <tr><td>Strict Priority</td><td>Off</td><td>40.8</td><td>61.4</td><td>1.0</td><td>0.227</td></tr>
+      <tr><td>Strict Priority</td><td>On</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+      <tr><td>FQ-PIE</td><td>Off</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+      <tr><td>FQ-PIE</td><td>On</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+      <tr><td>FQ-CoDel</td><td>Off</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+      <tr><td>FQ-CoDel</td><td>On</td><td>8.9</td><td>0.0</td><td>0.2</td><td>0.589</td></tr>
+    </table>
+
+    <p>
+      The DSCP-specific comparison for priority queueing makes the key result
+      especially clear. For both PFIFO_FAST-style and strict-priority PRIO,
+      enabling DSCP reduces mean control delay by 31.9 ms and reduces control
+      loss by 61.4 percentage points. In other words, explicit priority
+      classification is effective in this topology, but only when the packets
+      are actually marked so that the classifier can distinguish them.
+    </p>
+
+    <figure>
+      <img src="21_priority_delta_control_delay.png" alt="Control delay reduction from DSCP" />
+      <figcaption>
+        Figure 6. Control delay reduction achieved by DSCP when priority
+        schedulers are used.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="22_priority_delta_control_loss.png" alt="Control loss reduction from DSCP" />
+      <figcaption>
+        Figure 7. Control loss reduction achieved by DSCP when priority
+        schedulers are used.
       </figcaption>
     </figure>
 
@@ -391,25 +502,39 @@
       reveal how each scheduler redistributes service across the system. With
       DSCP enabled, the fair-queue schedulers keep control, status, telemetry,
       and bulk delays low while still allowing background throughput to remain
-      high.
+      high. The strict-priority schedulers, on the other hand, protect the
+      higher-priority classes by pushing more queueing burden onto lower-priority
+      traffic. This is not inherently wrong; it is in fact the intended behavior
+      of priority scheduling. However, it means that the choice between fair
+      queueing and strict priority should depend on whether the deployment values
+      low-latency isolation above overall balance.
     </p>
 
     <figure>
-      <img src="per_class_delay_dscp_on.png" alt="Per-class delay" />
+      <img src="05_per_class_delay_dscp_on.png" alt="Per-class delay" />
       <figcaption>
         Figure 8. Per-class delay by scheduler with DSCP enabled.
       </figcaption>
     </figure>
 
     <figure>
-      <img src="per_class_loss_dscp_on.png" alt="Per-class packet loss" />
+      <img src="06_per_class_loss_dscp_on.png" alt="Per-class packet loss" />
       <figcaption>
         Figure 9. Per-class packet loss by scheduler with DSCP enabled.
       </figcaption>
     </figure>
 
+    <p>
+      Heatmaps provide a compact cross-class summary of the same DSCP-enabled
+      comparison point. They make it easy to see, in one view, how FIFO leaves
+      control and reverse-direction application traffic exposed to high delay and
+      loss, while the priority and fair-queue cases concentrate better service on
+      the latency-sensitive classes. They are included here as a dense visual
+      summary rather than as the primary explanatory figures.
+    </p>
+
     <figure>
-      <img src="heatmap_delay_dscp_on.png" alt="Delay heatmap" />
+      <img src="25_heatmap.png" alt="Delay heatmap" />
       <figcaption>
         Figure 10. Heatmap summary of per-class mean end-to-end delay with DSCP
         enabled.
@@ -417,9 +542,37 @@
     </figure>
 
     <figure>
-      <img src="heatmap_loss_dscp_on.png" alt="Loss heatmap" />
+      <img src="26_heatmap.png" alt="Loss heatmap" />
       <figcaption>
         Figure 11. Heatmap summary of per-class packet loss with DSCP enabled.
+      </figcaption>
+    </figure>
+
+    <p>
+      A noteworthy detail appears in telemetry performance. Under strict-priority
+      PRIO with DSCP enabled, telemetry delay falls from 34.1 ms to 10.3 ms and
+      telemetry loss falls from 89.3% to 0.0%. By contrast, the PFIFO_FAST-style
+      configuration does not improve telemetry at the same operating point;
+      telemetry delay slightly worsens and telemetry loss remains high. This
+      happens because the PFIFO_FAST-style three-band arrangement separates
+      control and status but still leaves telemetry grouped with lower-priority/
+      default traffic. The four-band PRIO design therefore provides a more
+      complete QoS hierarchy for this workload.
+    </p>
+
+    <figure>
+      <img src="23_priority_delta_telemetry_delay.png" alt="Telemetry delay reduction" />
+      <figcaption>
+        Figure 12. Telemetry delay reduction from DSCP for the priority
+        schedulers.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="24_priority_delta_telemetry_loss.png" alt="Telemetry loss reduction" />
+      <figcaption>
+        Figure 13. Telemetry loss reduction from DSCP for the priority
+        schedulers.
       </figcaption>
     </figure>
 
@@ -427,27 +580,34 @@
     <p>
       The load sweep tests whether the scheduler ranking observed at the
       baseline point remains stable as background traffic is increased. The
-      answer is yes. Once the offered background load reaches 10 Mbps and then
-      exceeds the 10 Mbps bottleneck, FIFO begins to degrade rapidly, while
-      FQ-PIE and FQ-CoDel remain essentially flat across the full sweep.
+      answer is yes. At 8 Mbps of background load per direction, all schedulers
+      behave similarly and control traffic sees low delay and zero loss. Once
+      the offered background load reaches 10 Mbps and then exceeds the 10 Mbps
+      bottleneck, FIFO begins to degrade rapidly. Without DSCP, the
+      PFIFO_FAST-style and PRIO schedulers follow the same poor trajectory
+      because they are not yet separating classes. FQ-PIE and FQ-CoDel remain
+      essentially flat across the full sweep, keeping control delay near
+      8.9 ms and control loss at zero. When DSCP is enabled, PFIFO_FAST-style
+      and PRIO also flatten, indicating that the classification mechanism is the
+      missing ingredient rather than the queue structure alone.
     </p>
 
     <figure>
-      <img src="load_sweep_delay.png" alt="Load sweep delay" />
+      <img src="11_load_sweep_control_delay.png" alt="Load sweep delay" />
       <figcaption>
         Figure 14. Mean control delay across the offered-load sweep.
       </figcaption>
     </figure>
 
     <figure>
-      <img src="load_sweep_loss.png" alt="Load sweep loss" />
+      <img src="12_load_sweep_control_loss.png" alt="Load sweep loss" />
       <figcaption>
         Figure 15. Control loss across the offered-load sweep.
       </figcaption>
     </figure>
 
     <figure>
-      <img src="load_sweep_throughput.png" alt="Load sweep throughput" />
+      <img src="14_load_sweep_control_throughput.png" alt="Load sweep throughput" />
       <figcaption>
         Figure 16. Control throughput across the offered-load sweep.
       </figcaption>
@@ -458,24 +618,32 @@
       The follower sweep studies scaling pressure from the application side
       rather than the background-load side. As the number of followers
       increases from 4 to 8 and then 16, the same broad ranking remains visible.
+      FIFO control loss rises from 61.4% to 78.6% and then 85.9%, while FQ-PIE
+      and FQ-CoDel keep control loss at zero throughout. With DSCP enabled, the
+      PFIFO_FAST-style and PRIO schedulers track the fair-queue schedulers
+      rather than FIFO, again showing that class marking is decisive. Control
+      delay under FIFO declines somewhat as the number of followers rises, but
+      this does not indicate improvement; it occurs together with very high
+      packet loss and collapsing service, so many packets are simply not
+      surviving long enough to contribute to a larger delay average.
     </p>
 
     <figure>
-      <img src="follower_sweep_delay.png" alt="Follower sweep delay" />
+      <img src="15_follower_sweep_control_delay.png" alt="Follower sweep delay" />
       <figcaption>
         Figure 17. Mean control delay across the follower-count sweep.
       </figcaption>
     </figure>
 
     <figure>
-      <img src="follower_sweep_loss.png" alt="Follower sweep loss" />
+      <img src="16_follower_sweep_control_loss.png" alt="Follower sweep loss" />
       <figcaption>
         Figure 18. Control loss across the follower-count sweep.
       </figcaption>
     </figure>
 
     <figure>
-      <img src="follower_sweep_throughput.png" alt="Follower sweep throughput" />
+      <img src="18_follower_sweep_control_throughput.png" alt="Follower sweep throughput" />
       <figcaption>
         Figure 19. Control throughput across the follower-count sweep.
       </figcaption>
@@ -485,12 +653,20 @@
     <p>
       Fairness was evaluated using Jain indices computed per application class.
       The fairness plots complement the scheduler comparison by showing that
-      strong control protection can coexist with very different
-      service-distribution patterns.
+      strong control protection can coexist with very different service-
+      distribution patterns. In the scheduler-comparison scenario with DSCP
+      enabled, throughput fairness for control becomes perfect for
+      PFIFO_FAST-style, PRIO, FQ-PIE, and FQ-CoDel, while FIFO remains lower.
+      Delay fairness is generally high across all schedulers, but some
+      degradation appears in lower-priority classes under overloaded conditions.
+      The load and follower sweeps show that FIFO fairness collapses as overload
+      grows, especially for telemetry and bulk throughput, whereas the fair-queue
+      schedulers maintain near-perfect fairness for the application classes they
+      protect.
     </p>
 
     <figure>
-      <img src="fairness_scheduler_dscp_on.png" alt="Scheduler fairness" />
+      <img src="33_scheduler_compare_throughput_fairness.png" alt="Scheduler fairness" />
       <figcaption>
         Figure 20. Jain throughput fairness index for the scheduler-comparison
         scenario with DSCP enabled.
@@ -498,7 +674,7 @@
     </figure>
 
     <figure>
-      <img src="fairness_load_dscp_on.png" alt="Load fairness" />
+      <img src="35_load_sweep_throughput_fairness.png" alt="Load fairness" />
       <figcaption>
         Figure 21. Jain throughput fairness index across the offered-load sweep
         with DSCP enabled.
@@ -506,7 +682,7 @@
     </figure>
 
     <figure>
-      <img src="fairness_follower_dscp_on.png" alt="Follower fairness" />
+      <img src="37_follower_sweep_throughput_fairness.png" alt="Follower fairness" />
       <figcaption>
         Figure 22. Jain throughput fairness index across the follower-count
         sweep with DSCP enabled.
@@ -518,7 +694,21 @@
       This project demonstrates that QoS enforcement for bidirectional UDP
       control traffic is fundamentally a queue-management problem. When all
       packets share the bottleneck in a best-effort manner, control performance
-      can become unacceptable even in a simple topology.
+      can become unacceptable even in a simple topology. The baseline overloaded
+      case showed that FIFO allowed control delay to rise to 40.8 ms and control
+      loss to rise to 61.4%. Such a result would be difficult to tolerate in a
+      real control loop.
+    </p>
+
+    <p>
+      The non-trivial aspect of the project was not only building the ns-3
+      topology, but designing a workload in which multiple application classes
+      simultaneously contend across both directions of a bottleneck while
+      remaining interpretable enough to analyze. The study had to distinguish
+      control from reverse-direction status and telemetry traffic, create
+      overload in a controlled way, automate multiple scenario families,
+      aggregate per-flow outputs into class-level summaries, and then compare
+      schedulers using both direct QoS metrics and fairness metrics.
     </p>
 
     <p>
@@ -527,7 +717,22 @@
       protection even without DSCP-specific tuning in the presented topology.
       PFIFO_FAST-style and PRIO can also achieve very strong control behavior,
       but only when DSCP marking is enabled and the classifier has enough bands
-      to separate the classes that matter.
+      to separate the classes that matter. Among the priority approaches, PRIO
+      is the more expressive design because it can isolate telemetry more
+      effectively than the simpler PFIFO_FAST-style mapping.
+    </p>
+
+    <p>
+      Alternative approaches could extend the study in several directions.
+      First, future work should add repeated runs with multiple seeds so that
+      confidence intervals can be reported. Second, the queue size,
+      access-link capacity, and background burstiness could be swept to
+      determine how sensitive the ranking is to short-term queue transients.
+      Third, the model could be expanded to include wireless links, mixed
+      TCP/UDP cross traffic, or application-level deadlines to move closer to a
+      production deployment. Finally, a more explicit weighted scheduler could
+      be added if a future ns-3 configuration is desired that more directly
+      resembles weighted fair queueing.
     </p>
 
     <p>
@@ -562,8 +767,8 @@
     </p>
 
     <p>
-      Rather than pasting the full source directly into the webpage, it is
-      cleaner to link it here:
+      The full code listing is provided in the report appendix. A separate
+      commented source file can also be downloaded here:
       <a href="qos_udp_study_commented.cpp">qos_udp_study_commented.cpp</a>
     </p>
   </body>
